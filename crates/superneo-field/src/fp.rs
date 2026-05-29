@@ -83,6 +83,17 @@ impl Fp {
         self.balanced().unsigned_abs()
     }
 
+    /// Construct from a signed integer, mapping into `[0, q)` (used by the balanced
+    /// decomposition and norm machinery).
+    #[inline]
+    pub fn from_i64(v: i64) -> Self {
+        if v >= 0 {
+            Fp::new(v as u64)
+        } else {
+            -Fp::new((-(v as i128)) as u64)
+        }
+    }
+
     /// Reduce a 128-bit value modulo `q` (Solinas).
     ///
     /// Splits `x = x_lo + 2^64·x_hi`, and `x_hi = 2^32·hi_hi + hi_lo`, then applies
@@ -102,7 +113,11 @@ impl Fp {
         // 2^64 ≡ EPSILON: add hi_lo·EPSILON (< 2^64), correcting a carry by +EPSILON.
         let t1 = hi_lo * EPSILON;
         let (sum, carry) = t0.overflowing_add(t1);
-        let res = if carry { sum.wrapping_add(EPSILON) } else { sum };
+        let res = if carry {
+            sum.wrapping_add(EPSILON)
+        } else {
+            sum
+        };
         Fp::new(res)
     }
 

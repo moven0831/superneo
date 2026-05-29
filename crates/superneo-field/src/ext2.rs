@@ -44,7 +44,10 @@ impl Ext2 {
     /// Embed a base-field element as a constant polynomial (`F_q ↪ K`).
     #[inline]
     pub const fn from_base(a: Fp) -> Self {
-        Ext2 { c0: a, c1: Fp::ZERO }
+        Ext2 {
+            c0: a,
+            c1: Fp::ZERO,
+        }
     }
 
     /// Whether this is the zero element.

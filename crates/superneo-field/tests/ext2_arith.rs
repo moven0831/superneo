@@ -21,7 +21,11 @@ fn rand_ext2(r: &mut ChaCha8Rng) -> Ext2 {
 fn seven_is_a_non_residue() {
     // 7 is a QNR iff 7^{(q−1)/2} = −1.
     let legendre = Fp::new(7).pow((Q - 1) / 2);
-    assert_eq!(legendre, Fp::new(Q - 1), "7 must be a quadratic non-residue");
+    assert_eq!(
+        legendre,
+        Fp::new(Q - 1),
+        "7 must be a quadratic non-residue"
+    );
 }
 
 #[test]
@@ -51,8 +55,14 @@ fn base_field_embedding_is_a_homomorphism() {
     let mut r = rng();
     for _ in 0..20_000 {
         let (x, y) = (rand_fp(&mut r), rand_fp(&mut r));
-        assert_eq!(Ext2::from_base(x) + Ext2::from_base(y), Ext2::from_base(x + y));
-        assert_eq!(Ext2::from_base(x) * Ext2::from_base(y), Ext2::from_base(x * y));
+        assert_eq!(
+            Ext2::from_base(x) + Ext2::from_base(y),
+            Ext2::from_base(x + y)
+        );
+        assert_eq!(
+            Ext2::from_base(x) * Ext2::from_base(y),
+            Ext2::from_base(x * y)
+        );
         // mul_base agrees with full multiplication by an embedded scalar.
         let z = rand_ext2(&mut r);
         assert_eq!(z.mul_base(x), z * Ext2::from_base(x));
