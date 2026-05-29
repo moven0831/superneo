@@ -12,10 +12,20 @@
 //! Built in milestone M4.
 
 pub mod error;
+pub mod fold;
 pub mod multilinear;
+pub mod pi_ccs;
+pub mod pi_dec;
+pub mod pi_rlc;
 pub mod sumcheck;
 pub mod transcript;
+pub mod types;
 
 pub use error::FoldError;
+pub use fold::{fold, verify_fold};
 pub use sumcheck::{sumcheck_prove, sumcheck_verify, RoundPoly, SumCheckProof};
 pub use transcript::Transcript;
+pub use types::{
+    CcsInstance, CcsStructure, CcsWitness, CeInstance, CeWitness, FoldProof, GlobalParams,
+    PiCcsProof, PiDecProof, PiRlcProof, SparsePoly,
+};
