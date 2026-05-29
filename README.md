@@ -47,15 +47,21 @@ A strict bottom-up dependency stack:
 - **Folding** — sum-check (completeness + soundness), `Π_CCS` (the combined
   `Q = eq(X,α)(F + γ^K·NC) + γ^{2K+k}·Eval` sum-check), `Π_RLC`, `Π_DEC`, and
   `fold`/`verify_fold` = `Π_DEC ∘ Π_RLC ∘ Π_CCS` (**Theorem 3**). Tests cover a `K=2`,
-  `k=14` round-trip, two-step IVC-style composition, an `x·y=z` R1CS (valid folds; invalid
-  is rejected), and tamper rejection.
+  `k=14` round-trip, two-step composition, an `x·y=z` R1CS (valid folds; invalid is
+  rejected), and tamper rejection.
+- **Native IVC** — `prove_ivc`/`verify_ivc` chain the fold over a step sequence into a
+  running `k`-instance accumulator, bound by a Construction-2 IO digest
+  `digest_i = H(digest_{i-1}, i, acc_i)`. Tests cover a 4-step run and rejection of a
+  tampered digest, a tampered fold proof, and a dropped step.
 
-54 tests pass; the workspace is `clippy -D warnings` clean.
+58 tests pass; the workspace is `clippy -D warnings` clean.
 
-**Planned (full end-to-end, see the implementation plan):** the IVC loop with the
-Construction-2 IO encoding and a CCS recursive verifier circuit (`superneo-ivc`), and final
-proof compression via a Spartan-style SNARK with a FRI/BaseFold multilinear PCS over
-Goldilocks (`superneo-snark`).
+**Planned (remaining for full end-to-end, see the implementation plan):**
+
+- the **recursive verifier circuit** — expressing `verify_fold` itself as a CCS circuit to
+  close a true recursive IVC loop (`superneo-ivc` Phase 2);
+- final **proof compression** via a Spartan-style sum-check SNARK with a FRI/BaseFold
+  multilinear PCS over Goldilocks (`superneo-snark`).
 
 ## Build & test
 
