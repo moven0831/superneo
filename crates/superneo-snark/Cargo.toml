@@ -23,3 +23,6 @@ serde = ["dep:serde", "superneo-ivc/serde"]
 [dev-dependencies]
 rand.workspace = true
 rand_chacha.workspace = true
+
+[lints]
+workspace = true

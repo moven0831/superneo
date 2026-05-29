@@ -9,8 +9,13 @@
 //!     Lemma 4), `Π_DEC` (reduction of knowledge, Theorem 9), and their composition
 //!     `Π_SuperNeo = Π_DEC ∘ Π_RLC ∘ Π_CCS` (Theorem 8) exposed as `fold` / `verify_fold`.
 //!
-//! Modules are added in milestone M4.
+//! Built in milestone M4.
 
 pub mod error;
+pub mod multilinear;
+pub mod sumcheck;
+pub mod transcript;
 
 pub use error::FoldError;
+pub use sumcheck::{sumcheck_prove, sumcheck_verify, RoundPoly, SumCheckProof};
+pub use transcript::Transcript;

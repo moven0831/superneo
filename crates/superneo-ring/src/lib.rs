@@ -9,17 +9,15 @@
 //!   * the balanced ℓ∞ norm ([`norm`], Definition 3) and base-`b` decomposition
 //!     `split_b` ([`decomp`]).
 
-// Index-based loops are the clearest form for the dense fixed-size matrix/array
-// arithmetic in this crate (Gram inversion, rotation maps, ring ops).
-#![allow(clippy::needless_range_loop)]
-
 pub mod bar;
 pub mod decomp;
 pub mod error;
 pub mod maps;
 pub mod norm;
 pub mod ring;
+pub mod ring_k;
 pub mod s_action;
 
 pub use error::RingError;
 pub use ring::{RingElem, D};
+pub use ring_k::RingK;
