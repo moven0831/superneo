@@ -1,0 +1,20 @@
+[package]
+name = "superneo-ring"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Cyclotomic ring R_F = F[X]/(X^54+X^27+1), coefficient maps, bar transform, norms, decomposition"
+
+[dependencies]
+superneo-field.workspace = true
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "superneo-field/serde"]
+
+[dev-dependencies]
+rand.workspace = true
+rand_chacha.workspace = true

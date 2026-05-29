@@ -1,0 +1,23 @@
+[package]
+name = "superneo-commit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Ajtai/Module-SIS commitment, parameters (Appendix B.2), and the strong sampling set C"
+
+[dependencies]
+superneo-field.workspace = true
+superneo-ring.workspace = true
+thiserror.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "superneo-ring/serde"]
+
+[dev-dependencies]
+rand.workspace = true
+rand_chacha.workspace = true

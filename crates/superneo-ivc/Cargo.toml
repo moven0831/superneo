@@ -1,0 +1,24 @@
+[package]
+name = "superneo-ivc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "IVC: native folding loop, Construction-2 encoding, and the recursive verifier circuit in CCS"
+
+[dependencies]
+superneo-field.workspace = true
+superneo-ring.workspace = true
+superneo-commit.workspace = true
+superneo-fold.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "superneo-fold/serde"]
+
+[dev-dependencies]
+rand.workspace = true
+rand_chacha.workspace = true

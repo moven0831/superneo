@@ -1,0 +1,26 @@
+[package]
+name = "superneo-fold"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Sum-check, CCS/CE relations, and the Pi_CCS / Pi_RLC / Pi_DEC interactive reductions"
+
+[dependencies]
+superneo-field.workspace = true
+superneo-ring.workspace = true
+superneo-commit.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+sha3.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "superneo-commit/serde"]
+
+[dev-dependencies]
+rand.workspace = true
+rand_chacha.workspace = true

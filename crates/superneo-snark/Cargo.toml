@@ -1,0 +1,25 @@
+[package]
+name = "superneo-snark"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Final compression: Spartan-style sum-check SNARK + BaseFold/FRI multilinear PCS over Goldilocks"
+
+[dependencies]
+superneo-field.workspace = true
+superneo-ring.workspace = true
+superneo-commit.workspace = true
+superneo-fold.workspace = true
+superneo-ivc.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "superneo-ivc/serde"]
+
+[dev-dependencies]
+rand.workspace = true
+rand_chacha.workspace = true

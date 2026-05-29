@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+*.profraw
+
+# Reference material (Apache-2.0 Nightstream impl + paper PDF): consulted, not part
+# of our source tree. Nightstream carries its own .git, so it must not be tracked here.
+/context/

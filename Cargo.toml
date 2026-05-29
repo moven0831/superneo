@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.80"
+description = "Clean-room Rust PoC of the SuperNeo post-quantum lattice folding scheme (ePrint 2026/242)"
+
+[workspace.dependencies]
+# Internal crates (strict bottom-up DAG; see plan).
+superneo-field  = { path = "crates/superneo-field" }
+superneo-ring   = { path = "crates/superneo-ring" }
+superneo-commit = { path = "crates/superneo-commit" }
+superneo-fold   = { path = "crates/superneo-fold" }
+superneo-ivc    = { path = "crates/superneo-ivc" }
+superneo-snark  = { path = "crates/superneo-snark" }
+
+# External primitives (clean-room core; externals only for generic plumbing).
+thiserror   = "2"
+rand        = "0.9"
+rand_chacha = "0.9"
+rayon       = "1.10"
+serde       = { version = "1", features = ["derive"] }
+blake3      = "1.5"
+sha3        = "0.10"
+
+[profile.release]
+opt-level = 3
+lto = "thin"

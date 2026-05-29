@@ -1,0 +1,21 @@
+[package]
+name = "superneo-field"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Goldilocks prime field F_q and degree-2 extension K = F_{q^2} (clean-room)"
+
+[dependencies]
+thiserror.workspace = true
+rand = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+rand = ["dep:rand"]
+
+[dev-dependencies]
+rand.workspace = true
+rand_chacha.workspace = true
