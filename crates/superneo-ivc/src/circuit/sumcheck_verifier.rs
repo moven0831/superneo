@@ -2,11 +2,16 @@
 //!
 //! Given a sum-check transcript (round polynomials and challenges, supplied as advice),
 //! the gadget enforces the verifier's chain over `K`: each round's `g(0) + g(1)` equals
-//! the running claim, and the next claim is `g` interpolated at the round challenge. The
-//! returned [`KVar`] is the final reduced claim, which a full recursive verifier ties to
-//! `Q(r′)` (reconstructed from the claimed evaluations — the documented residual).
+//! the running claim, and the next claim is `g` interpolated at the round challenge.
 //!
-//! The round challenges are advice here: deriving them in-circuit is the Fiat–Shamir
+//! The returned final reduced claim is what a full recursive verifier ties to `Q(r')`
+//! (reconstructed from the claimed evaluations by [`super::pi_ccs_verifier`]). The
+//! allocated round-challenge wires (`= r'`) are returned alongside it so that
+//! reconstruction reuses the *same* `r'` advice rather than a second, independently-chosen
+//! copy — without that sharing, an adversary could satisfy the chain with one `r'` and the
+//! `Q(r')` tie with another.
+//!
+//! The round challenges are advice here: deriving them in-circuit is the Fiat-Shamir
 //! (Blake3) hashing that is left native in this PoC.
 
 use superneo_field::ext2::Ext2;
@@ -43,21 +48,26 @@ fn k_lagrange(cs: &mut ConstraintSystem, g: &[KVar], r: &KVar) -> KVar {
     acc
 }
 
-/// Synthesize the sum-check verifier into `cs`, returning the final reduced claim.
+/// Synthesize the sum-check verifier into `cs`, returning `(final reduced claim, r' wires)`.
 ///
 /// `init_claim` is the claimed sum `T` — a *public* value of the outer relation, so it is
 /// pinned as a constant wire (not advice), making the verified chain non-vacuous. The
-/// round polynomials and challenges are advice (the Fiat–Shamir hashing producing the
+/// round polynomials and challenges are advice (the Fiat-Shamir hashing producing the
 /// challenges stays native — the documented PoC residual). `round_evals[i]` are round
 /// `i`'s degree-`d` evaluations at `0..=d`; `challenges[i]` is round `i`'s challenge.
+///
+/// The second return value is the vector of allocated challenge wires — exactly the
+/// sum-check point `r'` — which the Π_CCS `Q(r')` reconstruction must reuse so that the
+/// chain and the final tie are bound to the same `r'`.
 pub fn synthesize_sumcheck_verifier(
     cs: &mut ConstraintSystem,
     init_claim: Ext2,
     round_evals: &[Vec<Ext2>],
     challenges: &[Ext2],
-) -> KVar {
+) -> (KVar, Vec<KVar>) {
     assert_eq!(round_evals.len(), challenges.len());
     let mut claim = KVar::constant(cs, init_claim);
+    let mut r_wires = Vec::with_capacity(challenges.len());
     for (g_evals, &r) in round_evals.iter().zip(challenges.iter()) {
         let g: Vec<KVar> = g_evals.iter().map(|&e| KVar::alloc(cs, e)).collect();
         let rk = KVar::alloc(cs, r);
@@ -65,6 +75,7 @@ pub fn synthesize_sumcheck_verifier(
         g[0].add(&g[1]).assert_eq(cs, &claim);
         // claim ← g(r).
         claim = k_lagrange(cs, &g, &rk);
+        r_wires.push(rk);
     }
-    claim
+    (claim, r_wires)
 }
