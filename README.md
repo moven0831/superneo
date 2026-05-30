@@ -28,7 +28,7 @@ A strict bottom-up dependency stack:
 | `superneo-ring`   | `R_F = F[X]/Φ₈₁` and `R_K`, coefficient maps, rotation/S-action, the **bar / inner-product transform** (Thm 5), the balanced ℓ∞ norm, and base-`b` decomposition |
 | `superneo-commit` | Ajtai commitment `Commit(A,z)=A·z`, the Goldilocks parameter set with its `(K+k)·T·(b−1) < B` guard, and the strong sampling set `C` |
 | `superneo-fold`   | Blake3 Fiat–Shamir transcript, CCS/CE relations, sum-check over `K`, the reductions `Π_CCS`/`Π_RLC`/`Π_DEC`, and the `fold` composition |
-| `superneo-ivc`    | native IVC loop (recursive verifier circuit planned) |
+| `superneo-ivc`    | native IVC loop + the recursive verifier circuit (sum-check verifier as CCS gadgets) |
 | `superneo-snark`  | final compression: BaseFold/FRI multilinear PCS + a Spartan-style reduction of the CE accumulator |
 
 ## Status
@@ -64,18 +64,30 @@ A strict bottom-up dependency stack:
   tests cover the BaseFold round-trip (+5 tamper vectors), the accumulator compression
   round-trip (+tamper/high-norm rejection), and the full `IVC → compress → verify` path.
 
-75 tests pass; the workspace is `clippy -D warnings` clean.
+- **Recursive verifier circuit** — the folding verifier's dominant component expressed as
+  CCS constraints. An R1CS builder (`⟨a,z⟩·⟨b,z⟩=⟨c,z⟩`, one-wire `z[0]=1`) finalizes into
+  the same `t=4` CCS shape `fold` consumes; extension-field wires multiply via Karatsuba
+  (3 base muls); and the **sum-check verifier** is synthesized in-circuit (per round:
+  `g(0)+g(1)=claim` and `claim←g(r)` via in-circuit Lagrange). An honest degree-4, 6-round
+  transcript synthesizes to **374 constraints** and is satisfied; it finalizes into a
+  satisfying CCS instance (loop closure at the relation level); a tampered round polynomial
+  or final claim is rejected.
 
-**Scope note (PoC).** The compression layer enforces the Ajtai opening, the (constant-term)
+79 tests pass; the workspace is `clippy -D warnings` clean.
+
+**Scope notes (PoC).** The compression layer enforces the Ajtai opening, the (constant-term)
 Theorem-6 evaluations, and the norm bound; the higher `R_K` coefficients of the evaluation
 claims are the documented residual (same linear-claim shape, with the bar-lifted matrix).
 The PCS uses illustrative parameters (rate `1/4`, 32 queries) and is not security-audited.
+The recursive circuit synthesizes the sum-check verifier with Fiat–Shamir challenges as
+advice (Blake3-in-circuit is out of PoC range); the Π_CCS final-`Q` reconstruction, the
+Π_RLC/Π_DEC gadgets, and the augmented-witness decomposition needed to re-fold the
+synthesized instance through the norm-bounded scheme are documented residuals.
 
 **Planned (remaining for full end-to-end, see the implementation plan):**
 
-- the **recursive verifier circuit** — expressing `verify_fold` itself as a CCS circuit to
-  close a true recursive IVC loop (`superneo-ivc` Phase 2);
-- **integration** — an end-to-end demo binary and Criterion benches (M8).
+- **integration** — an end-to-end demo binary and Criterion benches (M8), plus the
+  recursive-circuit residuals above.
 
 ## Build & test
 
