@@ -11,9 +11,12 @@
 //! constraints enforce per-step correctness; the digest binds the public transcript of
 //! the whole run.
 //!
-//! **Phase 2 (recursive verifier circuit).** Expressing `verify_fold` itself as a CCS
-//! circuit — closing a true recursive IVC loop — is the planned next milestone.
+//! **Phase 2 (recursive verifier circuit, [`circuit`]).** The folding verifier's work
+//! expressed as CCS constraints — closing a true recursive IVC loop. This PoC implements
+//! the dominant component (the sum-check verifier) plus the gadget framework; see the
+//! module for the documented residuals.
 
+pub mod circuit;
 pub mod error;
 
 pub use error::IvcError;
