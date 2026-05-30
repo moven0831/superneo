@@ -18,7 +18,7 @@ honest caveats.
 
 ```sh
 git clone <this-repo> superneo && cd superneo
-cargo test --workspace --release          # run the test suite (84 tests)
+cargo test --workspace --release          # run the test suite (97 tests)
 cargo run -p superneo-snark --example demo --release   # see the full pipeline run
 ```
 
@@ -121,28 +121,46 @@ All eight build milestones are implemented and tested end-to-end:
 - **compression** — a BaseFold/FRI polynomial commitment + a Spartan-style reduction that
   proves the accumulator's commitment opening, evaluation claims, and norm bound; with
   round-trip and tamper tests.
-- **recursive verifier circuit** — the sum-check verifier (the main cost of the fold
-  verifier) expressed as constraints, with a Karatsuba gadget for extension-field
-  multiplication.
+- **recursive verifier circuit** — the in-circuit Π_CCS verifier (the sum-check verifier
+  plus the `Q(r′)` reconstruction, the main cost of the fold verifier) and the Π_DEC
+  additivity check, expressed as constraints with a Karatsuba gadget for extension-field
+  multiplication; each checked satisfied iff its native verifier accepts.
 - **integration** — `run_pipeline`, the demo, and Criterion benches.
 
-84 tests pass; `cargo clippy --all-targets -- -D warnings` is clean.
+97 tests pass; `cargo clippy --all-targets -- -D warnings` is clean.
 
 ## Scope & limits
 
-This is a PoC, so a few things are deliberately simplified — all by design, not bugs:
+The soundness-relevant binding gaps an earlier audit surfaced have been closed; a few things
+remain deliberately scoped for a PoC:
 
-- **Proof size.** The final proof is *constant in the number of folds* (that's the useful
-  property), but at these toy parameters it's dominated by Merkle paths and is **larger than
-  the witness** — it is not a small encoding of the data. Parameters aren't tuned and the
-  code isn't audited.
-- **What the final proof binds.** It enforces the commitment opening, the norm bound, and
-  the *constant term* of each evaluation claim (the core Theorem-6 identity). The higher
-  ring coefficients are the same kind of linear claim and are left as a follow-up.
-- **Recursive verifier.** The sum-check verifier is in-circuit, but the Fiat–Shamir hashing
-  that produces the challenges is done natively (challenges are passed in as advice), and the
-  RLC/DEC checks and the full final-claim reconstruction aren't circuit-ified yet. Folding
-  the resulting circuit back in would also need the witness-decomposition step.
+- **What the final proof binds (closed).** Compression binds the commitment opening, the norm
+  bound, and **all `d` coefficients** of each evaluation claim `y_{i,j} ∈ R_K` — the Theorem-6
+  constant term *and* the higher coefficients — via the bar-lifted matrix and the rotation
+  identity, so a higher-coefficient forgery no longer passes.
+- **Fiat–Shamir binding (closed).** The transcript binds the commitment key `A` and the CCS
+  structure `s` (a verifier-key digest at each transcript origin, plus the relation inside
+  Π_CCS), and challenge squeezes are domain-separated by label.
+- **Parameters & IVC digest (closed).** `GlobalParams::goldilocks` enforces the
+  folding-admissibility guard, `PublicParams::from_params` derives `κ` from the validated
+  parameter set (so security can't be silently downgraded), and the IVC digest binds the full
+  CE state `(c, r, y)`.
+- **FRI soundness.** The query count is derived from a stated target (`SECURITY_BITS = 100`)
+  under the proximity-gap assumption; the provable unique-decoding bound would need ~3× more
+  queries. The proof is still *constant in the number of folds* but larger than the witness at
+  these parameters, and the code isn't independently audited.
+- **Recursive verifier (in progress).** The in-circuit Π_CCS verifier is complete over advice
+  challenges: the sum-check verifier **and** the final `Q(r′)` reconstruction (the combined
+  oracle `eq·(F + γ^K·NC) + γ^{2K+k}·Eval`, tied to the sum-check's reduced claim) are
+  synthesized as constraints, and a circuit built from a real proof is satisfied **iff** the
+  native verifier accepts (tamper an evaluation or a round polynomial → both reject). The
+  Π_DEC decomposition check (the two base-`b` additivity relations `c = Σ bⁱ⁻¹cᵢ`,
+  `y_j = Σ bⁱ⁻¹y_{i,j}`) is also in-circuit and checked the same way. Still open: the
+  Fiat–Shamir hashing that produces the challenges is native (they are passed as advice),
+  the Π_RLC ring-linear-combination check isn't circuit-ified yet, and closing the loop
+  additionally needs the witness-decomposition step — the remaining multi-phase effort (ring
+  multiplication gadgets for RLC → an arithmetization-friendly transcript for in-circuit
+  Fiat–Shamir → loop closure).
 
 ## Build & test
 
