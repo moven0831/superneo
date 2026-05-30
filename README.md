@@ -18,7 +18,7 @@ honest caveats.
 
 ```sh
 git clone <this-repo> superneo && cd superneo
-cargo test --workspace --release          # run the test suite (97 tests)
+cargo test --workspace --release          # run the test suite (99 tests)
 cargo run -p superneo-snark --example demo --release   # see the full pipeline run
 ```
 
@@ -121,13 +121,13 @@ All eight build milestones are implemented and tested end-to-end:
 - **compression** — a BaseFold/FRI polynomial commitment + a Spartan-style reduction that
   proves the accumulator's commitment opening, evaluation claims, and norm bound; with
   round-trip and tamper tests.
-- **recursive verifier circuit** — the in-circuit Π_CCS verifier (the sum-check verifier
-  plus the `Q(r′)` reconstruction, the main cost of the fold verifier) and the Π_DEC
-  additivity check, expressed as constraints with a Karatsuba gadget for extension-field
-  multiplication; each checked satisfied iff its native verifier accepts.
+- **recursive verifier circuit** — the full in-circuit `verify_fold` chain over advice
+  challenges (Π_CCS sum-check + `Q(r′)` reconstruction → Π_RLC ring linear combination →
+  Π_DEC additivity), expressed as constraints with Karatsuba and ring-multiplication
+  gadgets; each reduction checked satisfied iff its native verifier accepts.
 - **integration** — `run_pipeline`, the demo, and Criterion benches.
 
-97 tests pass; `cargo clippy --all-targets -- -D warnings` is clean.
+99 tests pass; `cargo clippy --all-targets -- -D warnings` is clean.
 
 ## Scope & limits
 
@@ -154,13 +154,14 @@ remain deliberately scoped for a PoC:
   oracle `eq·(F + γ^K·NC) + γ^{2K+k}·Eval`, tied to the sum-check's reduced claim) are
   synthesized as constraints, and a circuit built from a real proof is satisfied **iff** the
   native verifier accepts (tamper an evaluation or a round polynomial → both reject). The
-  Π_DEC decomposition check (the two base-`b` additivity relations `c = Σ bⁱ⁻¹cᵢ`,
-  `y_j = Σ bⁱ⁻¹y_{i,j}`) is also in-circuit and checked the same way. Still open: the
-  Fiat–Shamir hashing that produces the challenges is native (they are passed as advice),
-  the Π_RLC ring-linear-combination check isn't circuit-ified yet, and closing the loop
-  additionally needs the witness-decomposition step — the remaining multi-phase effort (ring
-  multiplication gadgets for RLC → an arithmetization-friendly transcript for in-circuit
-  Fiat–Shamir → loop closure).
+  Π_RLC ring linear combination (`c_out = Σ ρᵢ·cᵢ`, `y_out = Σ ρᵢ·y_{i,j}`, on in-circuit
+  `R_F`/`R_K` multiplication gadgets) and the Π_DEC additivity check (`c = Σ bⁱ⁻¹cᵢ`,
+  `y_j = Σ bⁱ⁻¹y_{i,j}`) are in-circuit too — so the **whole `verify_fold` chain** is
+  synthesized and checked the same way. Still open: the Fiat–Shamir hashing that produces
+  the challenges is native (α, γ, r′, ρ are passed as advice), and closing the loop needs
+  the witness-decomposition step — the remaining effort (an arithmetization-friendly
+  transcript for in-circuit Fiat–Shamir → loop closure). The ring-combination cost (`D²`
+  base mults per product) means the Π_RLC step runs at scaled-down `κ, K, n_R`.
 
 ## Build & test
 
