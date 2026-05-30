@@ -1,3 +1,27 @@
 [submodule "context/implementations/Nightstream"]
 	path = context/implementations/Nightstream
 	url = https://github.com/LFDT-Nightstream/Nightstream.git
+[submodule "context/implementations/lattirust"]
+	path = context/implementations/lattirust
+	url = https://github.com/lattirust/lattirust
+[submodule "context/implementations/latticefold"]
+	path = context/implementations/latticefold
+	url = https://github.com/NethermindEth/latticefold
+[submodule "context/implementations/sonobe"]
+	path = context/implementations/sonobe
+	url = https://github.com/privacy-ethereum/sonobe
+[submodule "context/implementations/Spartan"]
+	path = context/implementations/Spartan
+	url = https://github.com/microsoft/Spartan
+[submodule "context/implementations/Spartan2"]
+	path = context/implementations/Spartan2
+	url = https://github.com/microsoft/Spartan2
+[submodule "context/implementations/Nova"]
+	path = context/implementations/Nova
+	url = https://github.com/microsoft/Nova
+[submodule "context/implementations/plonky2"]
+	path = context/implementations/plonky2
+	url = https://github.com/0xPolygonZero/plonky2
+[submodule "context/implementations/awesome-folding"]
+	path = context/implementations/awesome-folding
+	url = https://github.com/lurk-lab/awesome-folding

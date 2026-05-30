@@ -3,11 +3,7 @@
 *.profraw
 .DS_Store
 
-# Reference material (consulted, kept local — not part of our source tree): the paper
-# PDF and the general-background reference impls stay local…
-/context/*
-!/context/implementations
-/context/implementations/*
-# …except the primary reference (Nightstream), linked as a lightweight git submodule
-# so it is referenced without vendoring its ~88 MB tree.
-!/context/implementations/Nightstream
+# Reference material. The paper PDFs stay local and are never vendored; the corpus
+# README is tracked, and every reference implementation is linked as a lightweight
+# git submodule so its tree is referenced rather than copied into this repo.
+/context/papers
