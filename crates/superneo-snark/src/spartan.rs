@@ -273,6 +273,7 @@ pub fn compress(
     let (z_commit, z_data) = basefold::commit(&z);
 
     let mut tr = Transcript::new(SNARK_DOMAIN);
+    tr.absorb_vk(pp, s); // bind the commitment key A and the relation s into Fiat–Shamir
     absorb_acc(&mut tr, acc);
     tr.absorb_bytes(b"snark/zroot", &z_commit.root);
     let eta = tr.challenge_ext(b"snark/eta");
@@ -326,6 +327,7 @@ pub fn verify(
     }
 
     let mut tr = Transcript::new(SNARK_DOMAIN);
+    tr.absorb_vk(pp, s); // bind the commitment key A and the relation s into Fiat–Shamir
     absorb_acc(&mut tr, acc);
     tr.absorb_bytes(b"snark/zroot", &proof.z_commit.root);
     let eta = tr.challenge_ext(b"snark/eta");

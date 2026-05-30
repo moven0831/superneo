@@ -72,15 +72,42 @@ fn genesis_witnesses(gp: &GlobalParams) -> Vec<CeWitness> {
 }
 
 /// Construction-2 IO digest update `H(prev, step, acc)`.
+///
+/// Binds the FULL CE state of every accumulator instance — the commitment `c`, the
+/// evaluation point `r`, and the evaluation claims `y` — per CE Definition 13. Each
+/// variable-length component is length-framed so the encoding is unambiguous. (An
+/// earlier version hashed only `c`, leaving `r`/`y` bound solely by the in-band
+/// `acc == final_acc` check in [`verify_ivc`]; a Construction-2/PCD verifier trusting
+/// the digest alone would not have caught a tampered `r` or `y`.)
 fn fold_digest(prev: &[u8; 32], step: usize, acc: &[CeInstance]) -> [u8; 32] {
+    fn absorb_ext2(h: &mut blake3::Hasher, e: &Ext2) {
+        h.update(&e.c0.to_u64().to_le_bytes());
+        h.update(&e.c1.to_u64().to_le_bytes());
+    }
+
     let mut h = blake3::Hasher::new();
-    h.update(b"superneo/ivc/digest");
+    h.update(b"superneo/ivc/digest/v2");
     h.update(prev);
     h.update(&(step as u64).to_le_bytes());
+    h.update(&(acc.len() as u64).to_le_bytes());
     for inst in acc {
+        // commitment c (κ ring slots, each d coefficients in F)
+        h.update(&(inst.c.0.len() as u64).to_le_bytes());
         for ring in &inst.c.0 {
             for c in ring.coeffs() {
                 h.update(&c.to_u64().to_le_bytes());
+            }
+        }
+        // evaluation point r ∈ K^{log_m}
+        h.update(&(inst.r.len() as u64).to_le_bytes());
+        for e in &inst.r {
+            absorb_ext2(&mut h, e);
+        }
+        // evaluation claims y ∈ (R_K)^t (each d coefficients in K)
+        h.update(&(inst.y.len() as u64).to_le_bytes());
+        for yk in &inst.y {
+            for e in yk.coeffs() {
+                absorb_ext2(&mut h, e);
             }
         }
     }
@@ -113,6 +140,7 @@ pub fn prove_ivc_with_witnesses(
     let mut acc_wit = genesis_witnesses(gp);
     let mut digest = GENESIS_DIGEST;
     let mut tr = Transcript::new(IVC_DOMAIN);
+    tr.absorb_vk(pp, s); // bind the commitment key A and the relation s into Fiat–Shamir
 
     let mut fresh_all = Vec::with_capacity(steps.len());
     let mut proofs = Vec::with_capacity(steps.len());
@@ -161,6 +189,7 @@ pub fn verify_ivc(
     let mut acc = genesis_instances(gp, pp, s.t());
     let mut digest = GENESIS_DIGEST;
     let mut tr = Transcript::new(IVC_DOMAIN);
+    tr.absorb_vk(pp, s); // bind the commitment key A and the relation s into Fiat–Shamir
 
     for (step_idx, (fresh, fp)) in proof.fresh.iter().zip(proof.fold_proofs.iter()).enumerate() {
         acc = verify_fold(&mut tr, gp, s, fresh, &acc, fp).map_err(|e| IvcError::Step {
@@ -177,4 +206,52 @@ pub fn verify_ivc(
         return Err(IvcError::DigestMismatch);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use superneo_ring::D;
+
+    fn base_instance() -> CeInstance {
+        CeInstance {
+            c: Commitment::zero(2),
+            r: vec![Ext2::ZERO; 3],
+            y: vec![RingK::ZERO; 4],
+        }
+    }
+
+    /// Construction-2 binding: the IO digest must change when `r` or `y` is tampered,
+    /// not only `c`.
+    #[test]
+    fn digest_binds_full_ce_state() {
+        let base = base_instance();
+        let d0 = fold_digest(&GENESIS_DIGEST, 0, std::slice::from_ref(&base));
+
+        let mut tr = base.clone();
+        tr.r[0] = Ext2::ONE;
+        assert_ne!(
+            d0,
+            fold_digest(&GENESIS_DIGEST, 0, std::slice::from_ref(&tr)),
+            "digest must bind the evaluation point r"
+        );
+
+        let mut ty = base.clone();
+        let mut coeffs = [Ext2::ZERO; D];
+        coeffs[1] = Ext2::ONE; // a higher coefficient of y
+        ty.y[0] = RingK::from_coeffs(coeffs);
+        assert_ne!(
+            d0,
+            fold_digest(&GENESIS_DIGEST, 0, std::slice::from_ref(&ty)),
+            "digest must bind the evaluation claims y"
+        );
+
+        let mut tc = base.clone();
+        tc.c = Commitment::zero(3);
+        assert_ne!(
+            d0,
+            fold_digest(&GENESIS_DIGEST, 0, std::slice::from_ref(&tc)),
+            "digest must bind the commitment c"
+        );
+    }
 }

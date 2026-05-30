@@ -67,13 +67,18 @@ fn absorb_ringk(tr: &mut Transcript, label: &'static [u8], y: &RingK) {
     }
 }
 
-/// Absorb all input instances (binding), then squeeze `(α, γ)`.
+/// Bind the relation `s`, absorb all input instances, then squeeze `(α, γ)`. Binding `s`
+/// here (both prover and verifier call this shared helper) ensures even a standalone
+/// `fold`/`verify_fold` — which builds its own transcript with no `absorb_vk` — commits
+/// the challenges to the relation being proven.
 fn absorb_inputs_and_challenges(
     tr: &mut Transcript,
     gp: &GlobalParams,
+    s: &CcsStructure,
     fresh: &[CcsInstance],
     carried: &[CeInstance],
 ) -> (Vec<Ext2>, Ext2) {
+    tr.absorb_structure(s);
     for inst in fresh {
         tr.absorb_commitment(b"piccs/ccs", &inst.c);
     }
@@ -262,7 +267,7 @@ pub fn pi_ccs_prove(
     let t = s.t();
     let d = gp.d;
 
-    let (alpha, gamma) = absorb_inputs_and_challenges(tr, gp, fresh, carried);
+    let (alpha, gamma) = absorb_inputs_and_challenges(tr, gp, s, fresh, carried);
     let gpow = gamma_powers(gamma, max_gamma_index(cap_k, k, t, d));
     let degree = round_degree(cap_k, gp.b, s.f.degree());
 

@@ -73,3 +73,31 @@ fn ivc_rejects_dropped_step() {
     proof.fresh.pop();
     assert!(verify_ivc(&gp, &pp, &s, &proof).is_err());
 }
+
+#[test]
+fn ivc_rejects_wrong_commitment_key() {
+    // Fiat–Shamir now binds the Ajtai matrix A: a proof made under one commitment key
+    // must not verify under a different one (same dimensions, different seed).
+    let (gp, pp, s, steps) = setup();
+    let proof = prove_ivc(&gp, &pp, &s, &steps).unwrap();
+    verify_ivc(&gp, &pp, &s, &proof).expect("correct key verifies");
+    let pp2 = PublicParams::setup_seeded([6u8; 32], KAPPA, N_R);
+    assert!(
+        verify_ivc(&gp, &pp2, &s, &proof).is_err(),
+        "weak-FS: proof verified under a different commitment key"
+    );
+}
+
+#[test]
+fn ivc_rejects_wrong_structure() {
+    // Fiat–Shamir now binds the relation s: verifying under a different structure (same
+    // shape, one entry changed) must fail.
+    let (gp, pp, s, steps) = setup();
+    let proof = prove_ivc(&gp, &pp, &s, &steps).unwrap();
+    let mut s2 = s.clone();
+    s2.matrices[0][0][0] += Fp::ONE;
+    assert!(
+        verify_ivc(&gp, &pp, &s2, &proof).is_err(),
+        "weak-FS: proof verified under a different relation"
+    );
+}
