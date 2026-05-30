@@ -3,6 +3,11 @@
 *.profraw
 .DS_Store
 
-# Reference material (Apache-2.0 Nightstream impl + paper PDF): consulted, not part
-# of our source tree. Nightstream carries its own .git, so it must not be tracked here.
-/context/
+# Reference material (consulted, kept local — not part of our source tree): the paper
+# PDF and the general-background reference impls stay local…
+/context/*
+!/context/implementations
+/context/implementations/*
+# …except the primary reference (Nightstream), linked as a lightweight git submodule
+# so it is referenced without vendoring its ~88 MB tree.
+!/context/implementations/Nightstream

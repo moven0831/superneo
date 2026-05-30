@@ -1,0 +1,3 @@
+[submodule "context/implementations/Nightstream"]
+	path = context/implementations/Nightstream
+	url = https://github.com/LFDT-Nightstream/Nightstream.git
