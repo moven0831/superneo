@@ -84,6 +84,35 @@ fn counter_witness_is_correct() {
 }
 
 #[test]
+fn invalid_witness_rejected_end_to_end() {
+    // The headline M8 claim: a low-norm but UNSATISFYING witness must not yield a verified
+    // run. z0·z1 = 1·1 = 1 ≠ 0 = z2 violates f = X₂·X₃ − X₄, while ‖z‖∞ < b = 2 passes the
+    // norm gate (so it is the CCS check, not the norm check, that must catch it).
+    use superneo_ivc::{prove_ivc, verify_ivc};
+    let (gp, pp) = setup();
+    let s = multiplication_structure(gp.m);
+    let mut z = vec![Fp::ZERO; gp.n_f];
+    z[0] = Fp::ONE;
+    z[1] = Fp::ONE;
+    z[2] = Fp::ZERO;
+    let steps = vec![vec![CcsWitness { z }]];
+
+    // The prover does not pre-check satisfaction; the fold verifier must reject.
+    match prove_ivc(&gp, &pp, &s, &steps) {
+        Err(_) => {} // rejected already at prove time — acceptable
+        Ok(proof) => assert!(
+            verify_ivc(&gp, &pp, &s, &proof).is_err(),
+            "fold verifier accepted an unsatisfying witness"
+        ),
+    }
+    // End to end, the pipeline must not report a verified run.
+    let verified = run_pipeline(&gp, &pp, &s, &steps)
+        .map(|r| r.verified)
+        .unwrap_or(false);
+    assert!(!verified, "unsatisfying witness produced a verified pipeline run");
+}
+
+#[test]
 fn demonstration_circuits_handle_large_inputs() {
     // Witness values are computed in the field, so inputs near u64::MAX neither overflow
     // nor desync from the field-arithmetic constraints.
