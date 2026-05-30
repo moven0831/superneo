@@ -25,9 +25,10 @@ fn k_lagrange(cs: &mut ConstraintSystem, g: &[KVar], r: &KVar) -> KVar {
             .filter(|&l| l != j)
             .map(|l| r.sub(&KVar::constant(cs, Ext2::from_base(Fp::new(l as u64)))))
             .collect();
-        let mut num = factors[0].clone();
-        for f in &factors[1..] {
-            num = num.mul(cs, f);
+        // The empty product (degree-0 round, `n == 1`) is the constant 1.
+        let mut num = KVar::constant(cs, Ext2::ONE);
+        for (idx, f) in factors.iter().enumerate() {
+            num = if idx == 0 { f.clone() } else { num.mul(cs, f) };
         }
         let mut den = Fp::ONE;
         for l in 0..n {
@@ -44,8 +45,11 @@ fn k_lagrange(cs: &mut ConstraintSystem, g: &[KVar], r: &KVar) -> KVar {
 
 /// Synthesize the sum-check verifier into `cs`, returning the final reduced claim.
 ///
-/// `init_claim` is the claimed sum `T`; `round_evals[i]` are the degree-`d` round
-/// polynomial's evaluations at `0..=d`; `challenges[i]` is round `i`'s challenge.
+/// `init_claim` is the claimed sum `T` — a *public* value of the outer relation, so it is
+/// pinned as a constant wire (not advice), making the verified chain non-vacuous. The
+/// round polynomials and challenges are advice (the Fiat–Shamir hashing producing the
+/// challenges stays native — the documented PoC residual). `round_evals[i]` are round
+/// `i`'s degree-`d` evaluations at `0..=d`; `challenges[i]` is round `i`'s challenge.
 pub fn synthesize_sumcheck_verifier(
     cs: &mut ConstraintSystem,
     init_claim: Ext2,
@@ -53,7 +57,7 @@ pub fn synthesize_sumcheck_verifier(
     challenges: &[Ext2],
 ) -> KVar {
     assert_eq!(round_evals.len(), challenges.len());
-    let mut claim = KVar::alloc(cs, init_claim);
+    let mut claim = KVar::constant(cs, init_claim);
     for (g_evals, &r) in round_evals.iter().zip(challenges.iter()) {
         let g: Vec<KVar> = g_evals.iter().map(|&e| KVar::alloc(cs, e)).collect();
         let rk = KVar::alloc(cs, r);

@@ -25,7 +25,10 @@ use superneo_field::ext2::Ext2;
 
 /// Build a complete recursive sum-check-verifier circuit: synthesize the verifier chain
 /// and bind its final reduced claim to `expected_final` (the value a full verifier would
-/// match against `Q(r′)`). Returns the finished constraint system.
+/// match against `Q(r′)`). Both endpoints `init_claim` and `expected_final` are public
+/// values of the outer relation, so they are pinned as constant wires — the circuit is
+/// satisfiable iff the (advice) transcript reduces the public `init_claim` to the public
+/// `expected_final`. Returns the finished constraint system.
 pub fn build_sumcheck_verifier_circuit(
     init_claim: Ext2,
     round_evals: &[Vec<Ext2>],
@@ -34,7 +37,7 @@ pub fn build_sumcheck_verifier_circuit(
 ) -> ConstraintSystem {
     let mut cs = ConstraintSystem::new();
     let claim = synthesize_sumcheck_verifier(&mut cs, init_claim, round_evals, challenges);
-    let expected = KVar::alloc(&mut cs, expected_final);
+    let expected = KVar::constant(&cs, expected_final);
     claim.assert_eq(&mut cs, &expected);
     cs
 }
