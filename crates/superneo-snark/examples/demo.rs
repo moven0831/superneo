@@ -57,7 +57,9 @@ fn circuit_line(name: &str, cs: &ConstraintSystem) {
 
 fn main() {
     let gp = GlobalParams::goldilocks(N_R);
-    let pp = PublicParams::setup_seeded([9u8; 32], KAPPA, N_R);
+    // Security-bearing setup: κ is derived from the validated parameter set (not a free arg).
+    let pp =
+        PublicParams::from_params([9u8; 32], &gp.params(), N_R).expect("valid Goldilocks params");
     let mut rng = ChaCha8Rng::seed_from_u64(0x5EED_04E0_9E37_79B9);
 
     println!("\n╔══════════════════════════════════════════════════════════════════════════╗");

@@ -118,6 +118,23 @@ fn tampered_params_fail_guard() {
 }
 
 #[test]
+fn from_params_binds_kappa_and_validates() {
+    // κ is derived from the validated param set, not a free argument: a caller cannot
+    // silently downgrade the Module-SIS level.
+    let pp = PublicParams::from_params([1u8; 32], &Params::GOLDILOCKS_B2, 6).unwrap();
+    assert_eq!(pp.kappa, Params::GOLDILOCKS_B2.kappa);
+    assert_eq!(pp.kappa, 18);
+
+    // An invalid parameter set is rejected by the security-bearing constructor.
+    let mut bad = Params::GOLDILOCKS_B2;
+    bad.max_fresh = 10_000; // breaks (K+k)·T·(b−1) < B
+    assert!(matches!(
+        PublicParams::from_params([1u8; 32], &bad, 6),
+        Err(CommitError::GuardFailed { .. })
+    ));
+}
+
+#[test]
 fn challenge_set_membership() {
     let mut r = rng();
     let p = Params::GOLDILOCKS_B2;

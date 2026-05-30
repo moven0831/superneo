@@ -146,9 +146,18 @@ impl GlobalParams {
         1 << self.log_m
     }
 
+    /// The cryptographic parameter set backing these global parameters.
+    pub fn params(&self) -> Params {
+        Params::GOLDILOCKS_B2
+    }
+
     /// Goldilocks parameters (Appendix B.2) for a ring-vector length `n_R`.
     pub fn goldilocks(n_r: usize) -> Self {
         let p = Params::GOLDILOCKS_B2;
+        // Enforce the folding-admissibility guard (Definition 14) on the production path,
+        // so an invalid parameter set fails fast rather than silently breaking binding.
+        p.validate()
+            .expect("Goldilocks parameter set must satisfy the folding-admissibility guard");
         let n_f = (p.d) * n_r;
         let cap_m = next_pow2(n_f);
         GlobalParams {

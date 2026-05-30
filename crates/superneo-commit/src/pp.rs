@@ -12,6 +12,7 @@ use superneo_ring::{RingElem, D};
 
 use crate::commit::Commitment;
 use crate::error::CommitError;
+use crate::params::Params;
 
 /// A uniform field element in `[0, q)` by rejection sampling.
 fn uniform_fp<R: RngCore>(rng: &mut R) -> Fp {
@@ -45,12 +46,29 @@ pub struct PublicParams {
 
 impl PublicParams {
     /// Expand `A` deterministically from `seed` (Setup, Definition 18).
+    ///
+    /// **Raw / unchecked:** `kappa` is a free argument and is NOT validated against any
+    /// parameter set. A small `kappa` silently downgrades the Module-SIS security level.
+    /// Production code should use [`PublicParams::from_params`], which derives `kappa`
+    /// from a validated [`Params`]. This raw form exists for tests that need an arbitrary
+    /// `kappa` (e.g. dimension-mismatch checks).
     pub fn setup_seeded(seed: [u8; 32], kappa: usize, n_cols: usize) -> Self {
         let mut rng = ChaCha8Rng::from_seed(seed);
         let a = (0..kappa)
             .map(|_| (0..n_cols).map(|_| uniform_ring(&mut rng)).collect())
             .collect();
         PublicParams { kappa, n_cols, a }
+    }
+
+    /// Setup bound to a validated parameter set: runs [`Params::validate`] and derives
+    /// `κ` from `params` so the Module-SIS security level cannot be silently downgraded.
+    pub fn from_params(
+        seed: [u8; 32],
+        params: &Params,
+        n_cols: usize,
+    ) -> Result<Self, CommitError> {
+        params.validate()?;
+        Ok(Self::setup_seeded(seed, params.kappa, n_cols))
     }
 
     /// Borrow the matrix entry `a[i][j]`.
