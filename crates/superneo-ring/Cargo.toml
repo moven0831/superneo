@@ -18,6 +18,11 @@ serde = ["dep:serde", "superneo-field/serde"]
 [dev-dependencies]
 rand.workspace = true
 rand_chacha.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "ring_bench"
+harness = false
 
 [lints]
 workspace = true

@@ -73,12 +73,24 @@ A strict bottom-up dependency stack:
   satisfying CCS instance (loop closure at the relation level); a tampered round polynomial
   or final claim is rejected.
 
-79 tests pass; the workspace is `clippy -D warnings` clean.
+- **Integration** — a `pipeline::run_pipeline` ties the stack together (fold → IVC →
+  compress → verify with timings, the IVC digest, and a proof-size estimate), driving both
+  a recursion-overhead workload (identity structure) and a real `x·y=z` multiplication gate.
+  The demonstration circuits — a counter step `out=in+1`, a Fibonacci transition, and a
+  multiplication gate — show ordinary computations compiling to the SuperNeo CCS shape. A
+  runnable demo (`cargo run -p superneo-snark --example demo --release`) prints the whole
+  narrative, and Criterion benches cover `ring_mul`/`bar_block`, `ajtai_commit`, `fold_step`,
+  and `compress`/`verify`.
+
+83 tests pass; the workspace is `clippy -D warnings` clean.
 
 **Scope notes (PoC).** The compression layer enforces the Ajtai opening, the (constant-term)
 Theorem-6 evaluations, and the norm bound; the higher `R_K` coefficients of the evaluation
 claims are the documented residual (same linear-claim shape, with the bar-lifted matrix).
 The PCS uses illustrative parameters (rate `1/4`, 32 queries) and is not security-audited.
+The compressed proof's size is **constant in the IVC length** (independent of the number of
+folds) — the succinctness that matters here — but at these PoC parameters it is dominated by
+the FRI query phase and is *larger* than the witness, so it is not a witness compression.
 The recursive circuit synthesizes the sum-check verifier with Fiat–Shamir challenges as
 advice (Blake3-in-circuit is out of PoC range); the Π_CCS final-`Q` reconstruction, the
 Π_RLC/Π_DEC gadgets, and the augmented-witness decomposition needed to re-fold the

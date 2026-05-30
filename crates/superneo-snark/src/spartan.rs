@@ -233,7 +233,10 @@ fn absorb_acc(tr: &mut Transcript, acc: &[CeInstance]) {
 
 // ---- top-level API -----------------------------------------------------------
 
-/// Compress an accumulator (`k` CE instances + their witnesses) into a succinct proof.
+/// Compress an accumulator (`k` CE instances + their witnesses) into a proof whose size
+/// is independent of the IVC length (the number of folds) — constant in the computation,
+/// though not smaller than the witness at these PoC parameters (the FRI query phase
+/// dominates). The witness itself is never revealed.
 pub fn compress(
     gp: &GlobalParams,
     pp: &PublicParams,

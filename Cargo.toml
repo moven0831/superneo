@@ -26,6 +26,7 @@ rayon       = "1.10"
 serde       = { version = "1", features = ["derive"] }
 blake3      = "1.5"
 sha3        = "0.10"
+criterion   = "0.5"
 
 [workspace.lints.clippy]
 # Index-based loops are the clearest form for the dense fixed-size matrix/array and
