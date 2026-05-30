@@ -11,8 +11,8 @@ use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use crate::error::FieldError;
 use crate::fp::Fp;
 
-/// The non-residue `W = 7` defining the extension `u² = W`.
-const W: Fp = Fp::new(7);
+/// The non-residue defining the extension `u² = W` (= [`Ext2::NON_RESIDUE`]).
+const W: Fp = Ext2::NON_RESIDUE;
 
 /// An element `c0 + c1·u` of `K = F_{q^2}`.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
@@ -24,6 +24,10 @@ pub struct Ext2 {
 }
 
 impl Ext2 {
+    /// The quadratic non-residue `7` defining the extension `K = F_q[u]/(u² − 7)`.
+    /// The single source of truth for this constant (mirrored by in-circuit `K`-mul).
+    pub const NON_RESIDUE: Fp = Fp::new(7);
+
     /// The additive identity.
     pub const ZERO: Ext2 = Ext2 {
         c0: Fp::ZERO,

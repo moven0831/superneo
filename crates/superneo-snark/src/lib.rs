@@ -10,6 +10,7 @@
 //!   * [`code`] — the foldable Reed–Solomon code (roots of unity, NTT encoding, the
 //!     multilinear basis transforms, and the codeword/coefficient fold commutation).
 //!   * [`merkle`] — Blake3 Merkle commitments for the codeword layers.
+//!   * [`mle`] — little-endian multilinear helpers shared by the PCS and the reduction.
 //!   * [`basefold`] — `commit` / `open` / `verify` for the multilinear PCS.
 //!   * [`spartan`] — the linear-claim batching + norm sum-check reducing the accumulator
 //!     relation to witness-MLE openings.
@@ -21,6 +22,7 @@ pub mod basefold;
 pub mod code;
 pub mod error;
 pub mod merkle;
+pub mod mle;
 pub mod spartan;
 
 pub use error::SnarkError;

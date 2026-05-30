@@ -89,7 +89,8 @@ pub fn verify_path(root: &[u8; 32], n: usize, index: usize, leaf: Ext2, path: &M
     if !n.is_power_of_two() || index >= n {
         return false;
     }
-    if path.siblings.len() != log2_checked(n) {
+    // `n` is a power of two (checked above), so its tree has `log2(n)` levels.
+    if path.siblings.len() != n.trailing_zeros() as usize {
         return false;
     }
     let mut acc = hash_leaf(leaf);
@@ -103,8 +104,4 @@ pub fn verify_path(root: &[u8; 32], n: usize, index: usize, leaf: Ext2, path: &M
         idx >>= 1;
     }
     &acc == root
-}
-
-fn log2_checked(n: usize) -> usize {
-    n.trailing_zeros() as usize
 }

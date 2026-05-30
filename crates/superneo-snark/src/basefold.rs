@@ -20,6 +20,7 @@ use superneo_field::fp::Fp;
 use crate::code::{self, fold_codeword, root_of_unity};
 use crate::error::SnarkError;
 use crate::merkle::{verify_path, MerklePath, MerkleTree};
+use crate::mle::{self, eq_eval, fold_evals};
 use superneo_fold::Transcript;
 
 /// Reed–Solomon blow-up exponent (rate `2^{-LOG_BLOWUP}`).
@@ -84,44 +85,6 @@ pub struct OpenProof {
     pub queries: Vec<QueryProof>,
 }
 
-/// `eq(r, x)` evaluation table over `{0,1}^ν`, little-endian (`x_k` = bit `k`).
-fn eq_table_le(r: &[Ext2]) -> Vec<Ext2> {
-    let nu = r.len();
-    let mut tab = vec![Ext2::ONE; 1 << nu];
-    for (k, &rk) in r.iter().enumerate() {
-        let one_minus = Ext2::ONE - rk;
-        for (i, slot) in tab.iter_mut().enumerate() {
-            *slot *= if (i >> k) & 1 == 1 { rk } else { one_minus };
-        }
-    }
-    tab
-}
-
-/// `eq(r, s) = Π_k (r_k·s_k + (1−r_k)(1−s_k))`.
-fn eq_eval(r: &[Ext2], s: &[Ext2]) -> Ext2 {
-    r.iter()
-        .zip(s.iter())
-        .map(|(&rk, &sk)| rk * sk + (Ext2::ONE - rk) * (Ext2::ONE - sk))
-        .fold(Ext2::ONE, |a, b| a * b)
-}
-
-/// Evaluate the multilinear extension of `evals` (little-endian) at `r`, binding LSB first.
-fn mle_eval_le(evals: &[Ext2], r: &[Ext2]) -> Ext2 {
-    let mut cur = evals.to_vec();
-    for &rk in r {
-        cur = fold_evals(&cur, rk);
-    }
-    cur[0]
-}
-
-/// Bind the LSB of an evaluation table to `alpha`: `t'[j] = (1−α)·t[2j] + α·t[2j+1]`.
-fn fold_evals(table: &[Ext2], alpha: Ext2) -> Vec<Ext2> {
-    table
-        .chunks_exact(2)
-        .map(|p| p[0] + alpha * (p[1] - p[0]))
-        .collect()
-}
-
 /// Lagrange-interpolate degree-2 evals at `0,1,2` and evaluate at `r`:
 /// `g(r) = g0·(r−1)(r−2)/2 − g1·r(r−2) + g2·r(r−1)/2`.
 fn lagrange3(g: &[Ext2; 3], r: Ext2) -> Ext2 {
@@ -178,15 +141,16 @@ pub fn open(
     absorb_context(tr, comm, point);
 
     let nu = data.num_vars;
-    let value = mle_eval_le(&code::lift(&data.evals), point);
+    let f0 = code::lift(&data.evals);
+    let value = mle::eval(&f0, point);
 
-    let mut f_tab = code::lift(&data.evals);
-    let mut eq_tab = eq_table_le(point);
+    let mut f_tab = f0;
+    let mut eq_tab = mle::eq_table(point);
 
-    // Codeword layers C_0..C_{ν−1} kept for the query phase; trees aligned.
+    // Codeword layers C_0..C_{ν−1} kept for the query phase; trees aligned. `codewords`
+    // grows by folding its own last layer, so no separate accumulator is needed.
     let mut codewords = vec![data.codeword0.clone()];
     let mut trees = vec![data.tree0.clone()];
-    let mut codeword = data.codeword0.clone();
 
     let mut round_polys = Vec::with_capacity(nu);
     let mut layer_roots = Vec::new();
@@ -212,20 +176,20 @@ pub fn open(
 
         f_tab = fold_evals(&f_tab, alpha);
         eq_tab = fold_evals(&eq_tab, alpha);
-        codeword = fold_codeword(&codeword, alpha);
+        let folded = fold_codeword(codewords.last().unwrap(), alpha);
 
         if round < nu - 1 {
             // C_{round+1} is an intermediate layer: commit and bind its root.
-            let tree = MerkleTree::commit(&codeword);
+            let tree = MerkleTree::commit(&folded);
             tr.absorb_bytes(b"basefold/layer", &tree.root());
             layer_roots.push(tree.root());
             trees.push(tree);
-            codewords.push(codeword.clone());
         }
+        codewords.push(folded);
     }
-    debug_assert_eq!(codeword.len(), FINAL_LEN);
+    debug_assert_eq!(codewords.last().unwrap().len(), FINAL_LEN);
 
-    let final_constant = codeword[0];
+    let final_constant = codewords.last().unwrap()[0];
     tr.absorb_ext(b"basefold/final", final_constant);
 
     let half0 = data.codeword0.len() / 2;
@@ -258,9 +222,9 @@ pub fn open(
 }
 
 /// FRI-fold a single point: `(lo + hi)/2 + α·(lo − hi)/(2·g^p)`, the per-position image
-/// of [`fold_codeword`](crate::code::fold_codeword).
-fn fold_point(lo: Ext2, hi: Ext2, alpha: Ext2, g_pow_p: Fp) -> Ext2 {
-    let two_inv = Ext2::from_base(Fp::new(2).inv().unwrap());
+/// of [`fold_codeword`](crate::code::fold_codeword). `two_inv` (= 2⁻¹ in `K`) is passed
+/// in so the constant inversion is hoisted out of the query loop.
+fn fold_point(lo: Ext2, hi: Ext2, alpha: Ext2, g_pow_p: Fp, two_inv: Ext2) -> Ext2 {
     let s_inv = Ext2::from_base(g_pow_p.inv().expect("domain points are nonzero"));
     (lo + hi) * two_inv + alpha * ((lo - hi) * two_inv * s_inv)
 }
@@ -308,9 +272,14 @@ pub fn verify(
         return Err(SnarkError::Verify("final folding/eval tie failed".into()));
     }
 
-    // FRI query phase.
+    // FRI query phase. Hoist the per-layer domain generators and 2⁻¹ (loop-invariant
+    // across all queries) out of the inner loops.
     let n0 = 1usize << (nu + LOG_BLOWUP);
     let half0 = n0 / 2;
+    let layer_gen: Vec<Fp> = (0..nu)
+        .map(|i| root_of_unity(nu + LOG_BLOWUP - i))
+        .collect();
+    let two_inv = Ext2::from_base(Fp::new(2).inv().expect("2 ≠ 0 in F_q"));
     let positions = sample_queries(tr, half0);
     if proof.queries.len() != positions.len() {
         return Err(SnarkError::Verify("query count mismatch".into()));
@@ -334,8 +303,8 @@ pub fn verify(
             {
                 return Err(SnarkError::PcsOpening(format!("Merkle path layer {i}")));
             }
-            let g_pow_p = root_of_unity(code::log2(n_i)).pow(p as u64);
-            let folded = fold_point(lyr.lo, lyr.hi, alphas[i], g_pow_p);
+            let g_pow_p = layer_gen[i].pow(p as u64);
+            let folded = fold_point(lyr.lo, lyr.hi, alphas[i], g_pow_p, two_inv);
             let expected = if i + 1 < nu {
                 // C_{i+1}[p]: lo or hi of the next layer's opened pair.
                 let half_next = half_i / 2;

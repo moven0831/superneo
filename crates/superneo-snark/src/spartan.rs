@@ -33,6 +33,7 @@ use superneo_ring::D;
 use crate::basefold::{self, OpenProof};
 use crate::code::log2;
 use crate::error::SnarkError;
+use crate::mle::{eq_eval, eq_table as eq_table_le, eval as mle_eval_le, fold_evals};
 
 /// A compressed proof of the final accumulator's CE satisfaction.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,40 +53,7 @@ pub struct SnarkProof {
 /// Domain-separation label for the compression transcript.
 const SNARK_DOMAIN: &[u8] = b"superneo/snark/v1";
 
-// ---- multilinear helpers (little-endian, matching the PCS) -------------------
-
-/// `eq(τ, x)` table over `{0,1}^ν`, little-endian.
-fn eq_table_le(tau: &[Ext2]) -> Vec<Ext2> {
-    let nu = tau.len();
-    let mut tab = vec![Ext2::ONE; 1 << nu];
-    for (k, &tk) in tau.iter().enumerate() {
-        let one_minus = Ext2::ONE - tk;
-        for (i, slot) in tab.iter_mut().enumerate() {
-            *slot *= if (i >> k) & 1 == 1 { tk } else { one_minus };
-        }
-    }
-    tab
-}
-
-/// Evaluate the multilinear extension of `table` (little-endian) at `point`.
-fn mle_eval_le(table: &[Ext2], point: &[Ext2]) -> Ext2 {
-    let mut cur = table.to_vec();
-    for &pk in point {
-        cur = cur
-            .chunks_exact(2)
-            .map(|p| p[0] + pk * (p[1] - p[0]))
-            .collect();
-    }
-    cur[0]
-}
-
-/// `eq(τ, s)` for two points.
-fn eq_eval(tau: &[Ext2], s: &[Ext2]) -> Ext2 {
-    tau.iter()
-        .zip(s.iter())
-        .map(|(&t, &x)| t * x + (Ext2::ONE - t) * (Ext2::ONE - x))
-        .fold(Ext2::ONE, |a, b| a * b)
-}
+// ---- multilinear helpers --------------------------------------------------
 
 /// The range polynomial `NC(v) = Π_{j=−(b−1)}^{b−1}(v − j)`; vanishes iff `‖v‖∞ < b`.
 fn range_nc(v: Ext2, b: u64) -> Ext2 {
@@ -133,10 +101,7 @@ fn sumcheck_prove_le(
         }
         let alpha = tr.challenge_ext(b"snark/scr");
         for t in tables.iter_mut() {
-            let folded: Vec<Ext2> = (0..half)
-                .map(|j| t[2 * j] + alpha * (t[2 * j + 1] - t[2 * j]))
-                .collect();
-            *t = folded;
+            *t = fold_evals(t, alpha);
         }
         rounds.push(g);
         point.push(alpha);
@@ -207,13 +172,14 @@ fn build_linear(
         let base = i * cap_m;
         let eqtab = eq_table(&inst.r); // MSB-first, matching compute_evals
 
-        // Evaluation claims: weight M̃_j(r_i, col) = Σ_out eq(r_i,out)·M_j[out][col].
+        // Evaluation claims: weight M̃_j(r_i, col) = Σ_out eq(r_i,out)·M_j[out][col]
+        // (the base-field matrix entry is folded in with `mul_base`, an Ext2×F product).
         for j in 0..t {
             let mat = &s.matrices[j];
             for col in 0..n_f {
                 let mut wj = Ext2::ZERO;
                 for (out, eo) in eqtab.iter().enumerate().take(gp.m) {
-                    wj += *eo * Ext2::from_base(mat[out][col]);
+                    wj += eo.mul_base(mat[out][col]);
                 }
                 w[base + col] += eta_pow * wj;
             }
@@ -228,10 +194,10 @@ fn build_linear(
                     let rmat = &rots[kp][cr];
                     for blk in 0..D {
                         let col = cr * D + blk;
-                        w[base + col] += eta_pow * Ext2::from_base(rmat[l][blk]);
+                        w[base + col] += eta_pow.mul_base(rmat[l][blk]);
                     }
                 }
-                v += eta_pow * Ext2::from_base(inst.c.0[kp].coeffs()[l]);
+                v += eta_pow.mul_base(inst.c.0[kp].coeffs()[l]);
                 eta_pow *= eta;
             }
         }
