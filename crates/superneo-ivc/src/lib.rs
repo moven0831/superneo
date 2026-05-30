@@ -92,6 +92,20 @@ pub fn prove_ivc(
     s: &CcsStructure,
     steps: &[Vec<CcsWitness>],
 ) -> Result<IvcProof, IvcError> {
+    prove_ivc_with_witnesses(gp, pp, s, steps).map(|(proof, _)| proof)
+}
+
+/// Prove a native IVC run, additionally returning the final accumulator's witnesses.
+///
+/// The witnesses are secret (the prover keeps them across steps); they are surfaced
+/// here so the final-compression layer (`superneo-snark`) can compress the accumulator
+/// it produced. They are *not* part of [`IvcProof`].
+pub fn prove_ivc_with_witnesses(
+    gp: &GlobalParams,
+    pp: &PublicParams,
+    s: &CcsStructure,
+    steps: &[Vec<CcsWitness>],
+) -> Result<(IvcProof, Vec<CeWitness>), IvcError> {
     let mut acc = genesis_instances(gp, pp, s.t());
     let mut acc_wit = genesis_witnesses(gp);
     let mut digest = GENESIS_DIGEST;
@@ -119,12 +133,15 @@ pub fn prove_ivc(
         proofs.push(proof);
     }
 
-    Ok(IvcProof {
-        fresh: fresh_all,
-        fold_proofs: proofs,
-        final_acc: acc,
-        final_digest: digest,
-    })
+    Ok((
+        IvcProof {
+            fresh: fresh_all,
+            fold_proofs: proofs,
+            final_acc: acc,
+            final_digest: digest,
+        },
+        acc_wit,
+    ))
 }
 
 /// Verify a native IVC run: replay each `verify_fold` and the digest chain, and check
