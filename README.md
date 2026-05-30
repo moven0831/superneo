@@ -28,8 +28,8 @@ A strict bottom-up dependency stack:
 | `superneo-ring`   | `R_F = F[X]/Φ₈₁` and `R_K`, coefficient maps, rotation/S-action, the **bar / inner-product transform** (Thm 5), the balanced ℓ∞ norm, and base-`b` decomposition |
 | `superneo-commit` | Ajtai commitment `Commit(A,z)=A·z`, the Goldilocks parameter set with its `(K+k)·T·(b−1) < B` guard, and the strong sampling set `C` |
 | `superneo-fold`   | Blake3 Fiat–Shamir transcript, CCS/CE relations, sum-check over `K`, the reductions `Π_CCS`/`Π_RLC`/`Π_DEC`, and the `fold` composition |
-| `superneo-ivc`    | (planned) IVC loop + recursive verifier circuit |
-| `superneo-snark`  | (planned) final Spartan + FRI/BaseFold compression |
+| `superneo-ivc`    | native IVC loop (recursive verifier circuit planned) |
+| `superneo-snark`  | final compression: BaseFold/FRI multilinear PCS + a Spartan-style reduction of the CE accumulator |
 
 ## Status
 
@@ -53,15 +53,29 @@ A strict bottom-up dependency stack:
   running `k`-instance accumulator, bound by a Construction-2 IO digest
   `digest_i = H(digest_{i-1}, i, acc_i)`. Tests cover a 4-step run and rejection of a
   tampered digest, a tampered fold proof, and a dropped step.
+- **Final compression** — a post-quantum **BaseFold/FRI multilinear PCS** over Goldilocks
+  (foldable Reed–Solomon code with `7^{(q−1)≫k}` roots of unity, radix-2 NTT encoding,
+  Blake3 Merkle layers, and an interleaved sum-check ⊗ codeword-fold with a query phase;
+  the load-bearing `encode(fold_coeffs)=fold_codeword(encode)` commutation is asserted),
+  plus a **Spartan-style reduction** that batches the CE relation — the Ajtai opening
+  `c = A·ẑ` (via the rotation identity), the **Theorem 6** evaluation claims
+  `ct(y_j)=~(M_j z)(r)`, and the ℓ∞ norm bound — into two sum-checks over a single
+  committed witness, opened by the PCS. `compress`/`verify` run over an IVC accumulator;
+  tests cover the BaseFold round-trip (+5 tamper vectors), the accumulator compression
+  round-trip (+tamper/high-norm rejection), and the full `IVC → compress → verify` path.
 
-58 tests pass; the workspace is `clippy -D warnings` clean.
+75 tests pass; the workspace is `clippy -D warnings` clean.
+
+**Scope note (PoC).** The compression layer enforces the Ajtai opening, the (constant-term)
+Theorem-6 evaluations, and the norm bound; the higher `R_K` coefficients of the evaluation
+claims are the documented residual (same linear-claim shape, with the bar-lifted matrix).
+The PCS uses illustrative parameters (rate `1/4`, 32 queries) and is not security-audited.
 
 **Planned (remaining for full end-to-end, see the implementation plan):**
 
 - the **recursive verifier circuit** — expressing `verify_fold` itself as a CCS circuit to
   close a true recursive IVC loop (`superneo-ivc` Phase 2);
-- final **proof compression** via a Spartan-style sum-check SNARK with a FRI/BaseFold
-  multilinear PCS over Goldilocks (`superneo-snark`).
+- **integration** — an end-to-end demo binary and Criterion benches (M8).
 
 ## Build & test
 
