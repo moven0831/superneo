@@ -15,10 +15,10 @@
 //! enforcing `‖Z‖∞ < b` (`NC(v) = Π_{j=−(b−1)}^{b−1}(v−j)`). Each sum-check reduces to
 //! one opening of `Z̃`, verified against the commitment by the PCS.
 //!
-//! The higher (`ℓ > 0`) coefficients of the evaluation claims `y_{i,j} ∈ R_K` are not
-//! separately enforced here; the constant term (Theorem 6), the Ajtai binding, and the
-//! norm bound are. Enforcing the full `R_K`-valued claims is the same linear-claim shape
-//! with the bar-lifted matrix, and is the documented residual for this PoC.
+//! All `D` coefficients of the evaluation claims `y_{i,j} ∈ R_K` are enforced — the
+//! constant term (Theorem 6) *and* the higher coefficients (`ℓ > 0`) — via the bar-lifted
+//! matrix and the rotation identity, the same linear-claim shape as the Ajtai binding.
+//! The Ajtai opening and the ℓ∞ norm bound are likewise enforced.
 
 use superneo_commit::PublicParams;
 use superneo_field::ext2::Ext2;
@@ -27,6 +27,7 @@ use superneo_fold::multilinear::{eq_table, next_pow2};
 use superneo_fold::sumcheck::lagrange_eval;
 use superneo_fold::types::flatten_ring;
 use superneo_fold::{CcsStructure, CeInstance, CeWitness, GlobalParams, Transcript};
+use superneo_ring::maps::bar_matrix_row;
 use superneo_ring::s_action::rot;
 use superneo_ring::D;
 
@@ -144,8 +145,8 @@ fn sumcheck_verify_le(
 
 /// Build the batched linear-claim weight table `W` (length `2^ν`, over `K`) and the
 /// target `v = Σ_claims η^c · public_c`, from public data only. Claims, in η-power
-/// order per instance: the `t` evaluation claims (`ct(y_{i,j})`), then the `κ·d` Ajtai
-/// opening claims (`cf(c_i[κ])_ℓ`).
+/// order per instance: the `t·d` evaluation-claim coefficients (`y_{i,j}.coeff(ℓ)`,
+/// `ℓ ∈ [0,d)`), then the `κ·d` Ajtai opening claims (`cf(c_i[κ])_ℓ`).
 fn build_linear(
     gp: &GlobalParams,
     pp: &PublicParams,
@@ -156,7 +157,6 @@ fn build_linear(
     cap_m: usize,
 ) -> (Vec<Ext2>, Ext2) {
     let t = s.t();
-    let n_f = gp.n_f;
     let kappa = pp.kappa;
 
     // Precompute rotation matrices rot(A[κ][col_ring]) once.
@@ -172,19 +172,37 @@ fn build_linear(
         let base = i * cap_m;
         let eqtab = eq_table(&inst.r); // MSB-first, matching compute_evals
 
-        // Evaluation claims: weight M̃_j(r_i, col) = Σ_out eq(r_i,out)·M_j[out][col]
-        // (the base-field matrix entry is folded in with `mul_base`, an Ext2×F product).
+        // Evaluation claims: bind ALL `D` coefficients of `y_{i,j} ∈ R_K` (the constant
+        // term of Theorem 6 *and* the higher coefficients), via the bar-lifted matrix and
+        // the rotation identity — the same linear-claim shape as the Ajtai block below:
+        //   coeff_ℓ(y_{i,j}) = Σ_{cr,blk} [Σ_out eq(r_i,out)·rot(M̄_j[out][cr])[ℓ][blk]] · z[cr·D+blk]
+        // (binding only the constant term would let a higher-coefficient forgery pass.)
         for j in 0..t {
             let mat = &s.matrices[j];
-            for col in 0..n_f {
-                let mut wj = Ext2::ZERO;
-                for (out, eo) in eqtab.iter().enumerate().take(gp.m) {
-                    wj += eo.mul_base(mat[out][col]);
+            // racc[cr][ℓ][blk] = Σ_out eq(r_i,out)·rot(M̄_j[out][cr])[ℓ][blk]  (over K).
+            let mut racc = vec![[[Ext2::ZERO; D]; D]; gp.n_r];
+            for (out, eo) in eqtab.iter().enumerate().take(gp.m) {
+                let bar_row = bar_matrix_row(&mat[out]).expect("matrix row length is a multiple of d");
+                for cr in 0..gp.n_r {
+                    let rmat = rot(&bar_row[cr]);
+                    for l in 0..D {
+                        for blk in 0..D {
+                            racc[cr][l][blk] += eo.mul_base(rmat[l][blk]);
+                        }
+                    }
                 }
-                w[base + col] += eta_pow * wj;
             }
-            v += eta_pow * inst.y[j].ct();
-            eta_pow *= eta;
+            for l in 0..D {
+                for cr in 0..gp.n_r {
+                    for blk in 0..D {
+                        w[base + cr * D + blk] += eta_pow * racc[cr][l][blk];
+                    }
+                }
+                // Target uses full K-multiplication: `coeff(ℓ)` is an `Ext2` (unlike the
+                // base-field Ajtai coeffs below, which use `mul_base`).
+                v += eta_pow * inst.y[j].coeff(l);
+                eta_pow *= eta;
+            }
         }
 
         // Ajtai opening claims: weight rot(A[κ][col_ring])[ℓ][col_in_block].
@@ -255,6 +273,7 @@ pub fn compress(
     let (z_commit, z_data) = basefold::commit(&z);
 
     let mut tr = Transcript::new(SNARK_DOMAIN);
+    tr.absorb_vk(pp, s); // bind the commitment key A and the relation s into Fiat–Shamir
     absorb_acc(&mut tr, acc);
     tr.absorb_bytes(b"snark/zroot", &z_commit.root);
     let eta = tr.challenge_ext(b"snark/eta");
@@ -308,6 +327,7 @@ pub fn verify(
     }
 
     let mut tr = Transcript::new(SNARK_DOMAIN);
+    tr.absorb_vk(pp, s); // bind the commitment key A and the relation s into Fiat–Shamir
     absorb_acc(&mut tr, acc);
     tr.absorb_bytes(b"snark/zroot", &proof.z_commit.root);
     let eta = tr.challenge_ext(b"snark/eta");

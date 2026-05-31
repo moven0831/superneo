@@ -23,12 +23,23 @@ use crate::merkle::{verify_path, MerklePath, MerkleTree};
 use crate::mle::{self, eq_eval, fold_evals};
 use superneo_fold::Transcript;
 
-/// Reed–Solomon blow-up exponent (rate `2^{-LOG_BLOWUP}`).
+/// Reed–Solomon blow-up exponent (rate `ρ = 2^{-LOG_BLOWUP}`).
 const LOG_BLOWUP: usize = 2;
 /// The final (degree-0) codeword length `2^{LOG_BLOWUP}`.
 const FINAL_LEN: usize = 1 << LOG_BLOWUP;
-/// Number of FRI consistency queries (PoC soundness parameter).
-const NUM_QUERIES: usize = 32;
+/// Target soundness of the FRI query phase, in bits.
+const SECURITY_BITS: usize = 100;
+/// Number of FRI consistency queries, derived from the target soundness and the rate.
+///
+/// Each query rejects a word `δ`-far from the code with probability `≥ δ`. Under the
+/// proximity-gap regime (`δ → 1 − ρ`, the standard deployment assumption) the per-query
+/// error is `ρ = 2^{-LOG_BLOWUP}`, so `q` queries give error `2^{-LOG_BLOWUP·q}` and
+/// reaching `SECURITY_BITS` needs `q = ⌈SECURITY_BITS / LOG_BLOWUP⌉`. (The *provable*
+/// unique-decoding bound `δ = (1−ρ)/2` is weaker — error `((1+ρ)/2)^q` — and needs ~3×
+/// more queries for the same target; raise this if a provable guarantee is required.
+/// Adding proof-of-work grinding of `g` bits would let `q` drop by `g/LOG_BLOWUP`.)
+/// Proof size scales ~linearly in `NUM_QUERIES`.
+const NUM_QUERIES: usize = SECURITY_BITS.div_ceil(LOG_BLOWUP);
 
 /// A BaseFold commitment: the Merkle root of the base codeword and the variable count.
 #[derive(Clone, Debug, PartialEq, Eq)]

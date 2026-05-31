@@ -1,7 +1,7 @@
 //! Fiat–Shamir transcript (clean-room, Blake3-based).
 //!
 //! A length-framed Blake3 sponge: `absorb` folds `(label, data)` into a 32-byte
-//! state; `squeeze` derives output from `(state, counter)` without consuming the
+//! state; `squeeze` derives output from `(state, label, counter)` without consuming the
 //! state, resetting the counter on the next absorb. All protocol randomness
 //! (α, γ, sum-check challenges, the Π_RLC ρ's) is derived here, so prover and
 //! verifier must absorb identical bytes in identical order (plan, Risk R3).
@@ -9,10 +9,12 @@
 //! Blake3 is the clean-room choice over Poseidon2; the type is the single transcript
 //! used across the fold, IVC, and SNARK layers.
 
-use superneo_commit::Commitment;
+use superneo_commit::{Commitment, PublicParams};
 use superneo_field::ext2::Ext2;
 use superneo_field::fp::Fp;
 use superneo_ring::{RingElem, D};
+
+use crate::types::CcsStructure;
 
 /// A Blake3 Fiat–Shamir transcript.
 #[derive(Clone)]
@@ -73,10 +75,77 @@ impl Transcript {
         }
     }
 
-    fn squeeze_bytes(&mut self, n: usize) -> Vec<u8> {
+    /// A 32-byte digest of the Ajtai matrix `A` (κ × n_cols ring elements).
+    fn pp_digest(pp: &PublicParams) -> [u8; 32] {
+        let mut h = blake3::Hasher::new();
+        h.update(b"superneo/vk/pp/v1");
+        h.update(&(pp.kappa as u64).to_le_bytes());
+        h.update(&(pp.n_cols as u64).to_le_bytes());
+        for i in 0..pp.kappa {
+            for j in 0..pp.n_cols {
+                for c in pp.entry(i, j).coeffs() {
+                    h.update(&c.to_u64().to_le_bytes());
+                }
+            }
+        }
+        *h.finalize().as_bytes()
+    }
+
+    /// A 32-byte digest of the CCS structure (the `t` matrices and the polynomial `f`).
+    fn structure_digest(s: &CcsStructure) -> [u8; 32] {
+        let mut h = blake3::Hasher::new();
+        h.update(b"superneo/vk/s/v1");
+        h.update(&(s.t() as u64).to_le_bytes());
+        h.update(&(s.m as u64).to_le_bytes());
+        for mat in &s.matrices {
+            for row in mat {
+                for v in row {
+                    h.update(&v.to_u64().to_le_bytes());
+                }
+            }
+        }
+        h.update(&(s.f.t as u64).to_le_bytes());
+        h.update(&(s.f.terms.len() as u64).to_le_bytes());
+        for (coeff, exps) in &s.f.terms {
+            h.update(&coeff.to_u64().to_le_bytes());
+            h.update(&(exps.len() as u64).to_le_bytes());
+            for &e in exps {
+                h.update(&(e as u64).to_le_bytes());
+            }
+        }
+        *h.finalize().as_bytes()
+    }
+
+    /// Bind the verifier key — the commitment key `pp` (Ajtai `A`) and the relation `s` —
+    /// into the transcript. MUST be called once at the transcript origin, before any
+    /// challenge is squeezed, so Fiat–Shamir binds the public parameters and the relation
+    /// (otherwise an adversary free to choose `A`/`s` is not committed to them).
+    pub fn absorb_vk(&mut self, pp: &PublicParams, s: &CcsStructure) {
+        let pp_d = Self::pp_digest(pp);
+        let s_d = Self::structure_digest(s);
+        let mut h = blake3::Hasher::new();
+        h.update(b"superneo/vk/v1");
+        h.update(&pp_d);
+        h.update(&s_d);
+        self.absorb_bytes(b"vk", h.finalize().as_bytes());
+    }
+
+    /// Bind only the relation structure `s` (used inside Π_CCS so standalone folds, which
+    /// build their own transcript without [`absorb_vk`], still bind the relation).
+    pub fn absorb_structure(&mut self, s: &CcsStructure) {
+        let s_d = Self::structure_digest(s);
+        self.absorb_bytes(b"structure", &s_d);
+    }
+
+    /// Derive output from `(state, label, counter)`. The label is folded in (length-framed)
+    /// so distinct challenge types are domain-separated even at the same state; the counter
+    /// keeps successive squeezes under one label distinct. Does not mutate `state`.
+    fn squeeze_bytes(&mut self, label: &'static [u8], n: usize) -> Vec<u8> {
         let mut h = blake3::Hasher::new();
         h.update(&self.state);
         h.update(b"squeeze");
+        h.update(&(label.len() as u64).to_le_bytes());
+        h.update(label);
         h.update(&self.squeeze_ctr.to_le_bytes());
         self.squeeze_ctr += 1;
         let mut reader = h.finalize_xof();
@@ -86,8 +155,8 @@ impl Transcript {
     }
 
     /// Squeeze a uniform field element (16 bytes → `u128` → reduce mod q).
-    pub fn challenge_fp(&mut self, _label: &'static [u8]) -> Fp {
-        let b = self.squeeze_bytes(16);
+    pub fn challenge_fp(&mut self, label: &'static [u8]) -> Fp {
+        let b = self.squeeze_bytes(label, 16);
         let mut x = [0u8; 16];
         x.copy_from_slice(&b);
         Fp::reduce128(u128::from_le_bytes(x))
@@ -109,12 +178,12 @@ impl Transcript {
     /// coefficients are uniform in `{−bound, …, bound}` (Definition 17).
     pub fn challenge_ring_set(
         &mut self,
-        _label: &'static [u8],
+        label: &'static [u8],
         n: usize,
         bound: i64,
     ) -> Vec<RingElem> {
         let span = (2 * bound + 1) as u64;
-        let bytes = self.squeeze_bytes(8 * D * n);
+        let bytes = self.squeeze_bytes(label, 8 * D * n);
         (0..n)
             .map(|i| {
                 let mut c = [Fp::ZERO; D];
@@ -128,5 +197,19 @@ impl Transcript {
                 RingElem::from_coeffs(c)
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn squeeze_is_label_separated() {
+        // FS-3: distinct challenge labels at the same transcript state must yield distinct
+        // challenges (pre-fix the label was ignored, so these were equal).
+        let mut t1 = Transcript::new(b"dom");
+        let mut t2 = Transcript::new(b"dom");
+        assert_ne!(t1.challenge_fp(b"alpha"), t2.challenge_fp(b"beta"));
     }
 }

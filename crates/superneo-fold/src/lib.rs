@@ -23,6 +23,9 @@ pub mod types;
 
 pub use error::FoldError;
 pub use fold::{fold, verify_fold};
+pub use pi_ccs::{pi_ccs_prove, pi_ccs_verify, pi_ccs_verify_traced, PiCcsTrace};
+pub use pi_dec::{pi_dec_prove, pi_dec_verify};
+pub use pi_rlc::{pi_rlc_prove, pi_rlc_verify};
 pub use sumcheck::{sumcheck_prove, sumcheck_verify, RoundPoly, SumCheckProof};
 pub use transcript::Transcript;
 pub use types::{

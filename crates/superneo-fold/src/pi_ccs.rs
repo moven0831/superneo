@@ -67,13 +67,18 @@ fn absorb_ringk(tr: &mut Transcript, label: &'static [u8], y: &RingK) {
     }
 }
 
-/// Absorb all input instances (binding), then squeeze `(α, γ)`.
+/// Bind the relation `s`, absorb all input instances, then squeeze `(α, γ)`. Binding `s`
+/// here (both prover and verifier call this shared helper) ensures even a standalone
+/// `fold`/`verify_fold` — which builds its own transcript with no `absorb_vk` — commits
+/// the challenges to the relation being proven.
 fn absorb_inputs_and_challenges(
     tr: &mut Transcript,
     gp: &GlobalParams,
+    s: &CcsStructure,
     fresh: &[CcsInstance],
     carried: &[CeInstance],
 ) -> (Vec<Ext2>, Ext2) {
+    tr.absorb_structure(s);
     for inst in fresh {
         tr.absorb_commitment(b"piccs/ccs", &inst.c);
     }
@@ -262,7 +267,7 @@ pub fn pi_ccs_prove(
     let t = s.t();
     let d = gp.d;
 
-    let (alpha, gamma) = absorb_inputs_and_challenges(tr, gp, fresh, carried);
+    let (alpha, gamma) = absorb_inputs_and_challenges(tr, gp, s, fresh, carried);
     let gpow = gamma_powers(gamma, max_gamma_index(cap_k, k, t, d));
     let degree = round_degree(cap_k, gp.b, s.f.degree());
 
@@ -312,6 +317,27 @@ pub fn pi_ccs_prove(
     )
 }
 
+/// The Fiat–Shamir challenge values and claims an in-circuit Π_CCS verifier consumes as
+/// advice: the eq-challenge vector `α`, the batching challenge `γ`, the sum-check point
+/// `r′`, the claimed sum `T` fed to the sum-check, and the sum-check's reduced claim
+/// (which the native verifier ties to `Q(r′)`). Returned by [`pi_ccs_verify_traced`] so a
+/// recursive verifier circuit can be built from — and checked against — a real proof
+/// (the in-circuit Fiat–Shamir that would *derive* these values is the documented residual,
+/// deferred to a later phase; here the circuit takes them as advice).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PiCcsTrace {
+    /// The eq-challenge vector `α` (length `log_m`).
+    pub alpha: Vec<Ext2>,
+    /// The batching challenge `γ`.
+    pub gamma: Ext2,
+    /// The sum-check evaluation point `r′` (length `log_m`).
+    pub r_prime: Vec<Ext2>,
+    /// The claimed sum `T` fed to the sum-check verifier.
+    pub claimed_sum: Ext2,
+    /// The sum-check's final reduced claim, equal to `Q(r′)` for an accepting proof.
+    pub reduced_claim: Ext2,
+}
+
 /// Π_CCS verifier. Returns the `K+k` output CE instances.
 pub fn pi_ccs_verify(
     tr: &mut Transcript,
@@ -321,12 +347,27 @@ pub fn pi_ccs_verify(
     carried: &[CeInstance],
     proof: &PiCcsProof,
 ) -> Result<Vec<CeInstance>, FoldError> {
+    pi_ccs_verify_traced(tr, gp, s, fresh, carried, proof).map(|(out, _)| out)
+}
+
+/// Like [`pi_ccs_verify`], but additionally returns the [`PiCcsTrace`] of internal
+/// Fiat–Shamir challenges and claims. This is the single source of truth for the verifier
+/// — [`pi_ccs_verify`] delegates here and discards the trace — so the recursive verifier
+/// circuit (built from the trace) is guaranteed to mirror the native check exactly.
+pub fn pi_ccs_verify_traced(
+    tr: &mut Transcript,
+    gp: &GlobalParams,
+    s: &CcsStructure,
+    fresh: &[CcsInstance],
+    carried: &[CeInstance],
+    proof: &PiCcsProof,
+) -> Result<(Vec<CeInstance>, PiCcsTrace), FoldError> {
     let cap_k = fresh.len();
     let k = carried.len();
     let t = s.t();
     let d = gp.d;
 
-    let (alpha, gamma) = absorb_inputs_and_challenges(tr, gp, fresh, carried);
+    let (alpha, gamma) = absorb_inputs_and_challenges(tr, gp, s, fresh, carried);
     let gpow = gamma_powers(gamma, max_gamma_index(cap_k, k, t, d));
     let degree = round_degree(cap_k, gp.b, s.f.degree());
     let t_claimed = claimed_sum(carried, gp, &gpow, cap_k);
@@ -375,5 +416,12 @@ pub fn pi_ccs_verify(
         ));
     }
 
-    Ok(output_instances(fresh, carried, &r_prime, &proof.evals))
+    let trace = PiCcsTrace {
+        alpha,
+        gamma,
+        r_prime: r_prime.clone(),
+        claimed_sum: t_claimed,
+        reduced_claim: claim,
+    };
+    Ok((output_instances(fresh, carried, &r_prime, &proof.evals), trace))
 }
